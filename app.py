@@ -1,26 +1,46 @@
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 import numpy as np
 import cv2
-from tensorflow.keras.models import load_model
 import base64
 import os
 from werkzeug.utils import secure_filename
+import onnxruntime as ort
 
-app = Flask(__name__, static_folder='build', static_url_path='')
-CORS(app, resources={r"/api/*": {"origins": "http://localhost:3000"}})
+app = Flask(__name__)
+CORS(app)
 
 # Configuration
 UPLOAD_FOLDER = 'uploads'
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
-MODEL_PATH = '/Users/appdev/Downloads/Handwritten-Digit-Recognition/backend/digit_recognition_model.keras'
+MODEL_PATH = 'digit_model.onnx'
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# Load the trained model
-print("Loading model...")
-model = load_model(MODEL_PATH)
-print("✅ Model loaded successfully!")
+# Load the ONNX model
+def setup_model():
+    if not os.path.exists(MODEL_PATH):
+        print("❌ ONNX model not found. Please run convert_existing_model.py first.")
+        return None
+    
+    try:
+        # Try different providers for compatibility
+        providers = ['CPUExecutionProvider']
+        session = ort.InferenceSession(MODEL_PATH, providers=providers)
+        print("✅ ONNX model loaded successfully!")
+        
+        # Print detailed model info
+        input_info = session.get_inputs()[0]
+        output_info = session.get_outputs()[0]
+        print(f"📊 Model input: {input_info.name}, shape: {input_info.shape}")
+        print(f"📊 Model output: {output_info.name}, shape: {output_info.shape}")
+        
+        return session
+    except Exception as e:
+        print(f"❌ Error loading ONNX model: {e}")
+        return None
+
+model_session = setup_model()
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -92,24 +112,49 @@ def preprocess_digit(image):
         
         # Normalize
         digit_normalized = digit_resized.astype('float32') / 255.0
-        digit_normalized = digit_normalized.reshape(1, 28, 28, 1)
         
-        return digit_normalized, digit_resized
+        # Reshape based on model input requirements
+        if model_session:
+            input_shape = model_session.get_inputs()[0].shape
+            if len(input_shape) == 4 and input_shape[1] == 1:
+                # NCHW format: (1, 1, 28, 28)
+                digit_processed = digit_normalized.reshape(1, 1, 28, 28)
+            else:
+                # NHWC format: (1, 28, 28, 1)
+                digit_processed = digit_normalized.reshape(1, 28, 28, 1)
+        else:
+            # Default to NHWC
+            digit_processed = digit_normalized.reshape(1, 28, 28, 1)
+        
+        return digit_processed, digit_resized
     
     except Exception as e:
         print(f"Error in preprocessing: {str(e)}")
         return None, None
 
 def predict_digit(processed_image):
-    """Make prediction using the trained model."""
+    """Make prediction using the ONNX model."""
+    if model_session is None:
+        return None, None, None
+    
     try:
-        predictions = model.predict(processed_image, verbose=0)
+        input_name = model_session.get_inputs()[0].name
+        output_name = model_session.get_outputs()[0].name
+        
+        # Ensure input matches model expectations
+        input_shape = model_session.get_inputs()[0].shape
+        if len(input_shape) == 4 and input_shape[1] == 1 and processed_image.shape[-1] == 1:
+            # Convert from NHWC to NCHW if needed
+            if len(processed_image.shape) == 4 and processed_image.shape[1] == 28:
+                processed_image = np.transpose(processed_image, (0, 3, 1, 2))
+        
+        predictions = model_session.run([output_name], {input_name: processed_image})
         predicted_digit = int(np.argmax(predictions[0]))
-        confidence = float(predictions[0][predicted_digit] * 100)
+        confidence = float(np.max(predictions[0]) * 100)
         
         # Get all probabilities
         all_probabilities = {
-            str(i): float(predictions[0][i] * 100) 
+            str(i): float(predictions[0][0][i] * 100) 
             for i in range(10)
         }
         
@@ -119,17 +164,12 @@ def predict_digit(processed_image):
         print(f"Error in prediction: {str(e)}")
         return None, None, None
 
-@app.route('/')
-def serve():
-    """Serve the React frontend."""
-    return send_from_directory(app.static_folder, 'index.html')
-
 @app.route('/api/health', methods=['GET'])
 def health_check():
     """Health check endpoint."""
     return jsonify({
         'status': 'healthy',
-        'model_loaded': model is not None
+        'model_loaded': model_session is not None
     })
 
 @app.route('/api/predict/camera', methods=['POST'])
