@@ -1,0 +1,21 @@
+# Model Files
+*.keras
+*.h5
+*.pkl
+*.pth
+# Image Files
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+# Video files
+*.mp4
+*.avi
+*.mov
+# Directories
+uploads/
+__pycache__/
+*.pyc
+.env
+.DS_STORE
