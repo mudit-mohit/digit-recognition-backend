@@ -8,7 +8,7 @@ from werkzeug.utils import secure_filename
 import onnxruntime as ort
 
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": ["http://localhost:3000", "https://digit-recognition-front.vercel.app/"]}})
+CORS(app, resources={r"/api/*": {"origins": ["http://localhost:3000", "https://digit-recognition-front.vercel.app"]}})
 
 # Configuration
 UPLOAD_FOLDER = 'uploads'
