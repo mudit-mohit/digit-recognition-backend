@@ -5,7 +5,7 @@ import numpy as np
 import os
 
 def convert_existing_model():
-    # Path to your existing trained model
+    # Path to the existing trained model
     keras_model_path = "/Users/appdev/Downloads/Handwritten-Digit-Recognition/backend/digit_recognition_model.keras"
     onnx_model_path = "digit_model.onnx"
     
@@ -17,7 +17,7 @@ def convert_existing_model():
     print(f"🔄 Loading existing Keras model from: {keras_model_path}")
     
     try:
-        # Load your existing trained model with custom objects if needed
+        # Load existing trained model with custom objects if needed
         model = tf.keras.models.load_model(keras_model_path)
         print("✅ Keras model loaded successfully!")
         

@@ -8,7 +8,7 @@ from werkzeug.utils import secure_filename
 import onnxruntime as ort
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/api/*": {"origins": ["http://localhost:3000", "https://digit-recognition-front.vercel.app/"]}})
 
 # Configuration
 UPLOAD_FOLDER = 'uploads'
@@ -117,10 +117,10 @@ def preprocess_digit(image):
         if model_session:
             input_shape = model_session.get_inputs()[0].shape
             if len(input_shape) == 4 and input_shape[1] == 1:
-                # NCHW format: (1, 1, 28, 28)
+                # NCHW format
                 digit_processed = digit_normalized.reshape(1, 1, 28, 28)
             else:
-                # NHWC format: (1, 28, 28, 1)
+                # NHWC format
                 digit_processed = digit_normalized.reshape(1, 28, 28, 1)
         else:
             # Default to NHWC
